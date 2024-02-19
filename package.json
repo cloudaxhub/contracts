@@ -1,0 +1,28 @@
+{
+  "name": "cloudax-contracts",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "hardhat node",
+    "clean": "hardhat clean",
+    "compile": "hardhat compile",
+    "console": "hardhat console",
+    "finder": "hardhat finder",
+    "size": "hardhat size-contracts",
+    "test": "hardhat test",
+    "test:trace": "hardhat test --trace",
+    "test:fresh": "hardhat compile --force && hardhat test --no-compile --trace",
+    "test:coverage": "hardhat coverage"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "dotenv": "^16.4.4",
+    "hardhat": "^2.20.1"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.0.1"
+  }
+}
