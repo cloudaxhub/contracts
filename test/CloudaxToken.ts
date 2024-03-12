@@ -172,7 +172,7 @@ describe("Cloudax Token", function () {
       await cloudax.connect(owner).setBlacklisted(john.address, true);
       await expect(
         cloudax.connect(owner).receiveTokens(john.address, 100)
-      ).to.be.revertedWith("An address is blacklisted");
+      ).to.be.revertedWithCustomError;
     });
   });
   describe("More Trading Control", function () {

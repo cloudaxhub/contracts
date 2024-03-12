@@ -1,19 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.20;
 
-import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
-import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
-import { Initializable } from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
-
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
+import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
 /**
  * @title CloudaxTresauryVestingWallet (smart contract)
  * @dev A contract designed to manage the vesting of tokens according to predefined schedules.
  * It is intended to facilitate token distribution processes, particularly those involving
- * gradual release over time, which is common in token sales and employee compensation schemes. 
+ * gradual release over time, which is common in token sales and employee compensation schemes.
  * Further expanded to control the swap operations for Eco (our flagship web2 token) and CLDX our web3 token.
  *
  * Architecture:
@@ -40,7 +39,7 @@ import { Initializable } from "@openzeppelin/contracts/proxy/utils/Initializable
  * - Functions are protected against reentrancy attacks and only callable by the owner or when the contract is not paused.
  * - Events are emitted for significant actions, allowing off-chain tracking of activity
  * - The contract can be paused to stop token releases, and unpaused to resume them
- * - The contract holds and release CLDX token in exchange for ECO 
+ * - The contract holds and release CLDX token in exchange for ECO
  * - Burns CLDX to balance liquidity w.r.t Eco miniting
  *
  * Use Cases:
@@ -60,12 +59,20 @@ import { Initializable } from "@openzeppelin/contracts/proxy/utils/Initializable
 
 contract CloudaxTresauryVestingWallet is Ownable, ReentrancyGuard, Pausable {
     using SafeERC20 for ERC20;
-    
+
+    error UnauthorizedAddress();
+    error InvalidOracleAddress();
+    error NotAnApprovedEcoWallet();
+    error InsufficientAmount();
+    error InsufficientTokens();
+    error ExceededBurnAllocation();
+    error ZeroAddress();
+
     // Structure to represent a vesting schedule
     struct VestingSchedule {
-        uint256 totalAmount;   // Total amount of tokens to be released at the end of the vesting
-        uint256 startTime;     // Start time of the vesting period
-        uint256 duration;      // Duration of the vesting period in seconds
+        uint256 totalAmount; // Total amount of tokens to be released at the end of the vesting
+        uint256 startTime; // Start time of the vesting period
+        uint256 duration; // Duration of the vesting period in seconds
     }
 
     // Events
@@ -77,11 +84,21 @@ contract CloudaxTresauryVestingWallet is Ownable, ReentrancyGuard, Pausable {
     event Released(address beneficiaryAddress, uint256 amount);
 
     /**
+     * @dev Emitted when oracle address is set.
+     * @param oldOracleAddress Old beneficiary address.
+     * @param newOracleAddress New beneficiary address.
+     */
+    event OracleSet(address oldOracleAddress, address newOracleAddress);
+
+    /**
      * @dev Emitted when beneficiary address is set.
      * @param oldBeneficiaryAddress Old beneficiary address.
      * @param newBeneficiaryAddress New beneficiary address.
      */
-    event BeneficiarySet(address oldBeneficiaryAddress, address newBeneficiaryAddress);
+    event BeneficiarySet(
+        address oldBeneficiaryAddress,
+        address newBeneficiaryAddress
+    );
 
     /**
      * @dev Emitted when a token swap occurs.
@@ -91,7 +108,13 @@ contract CloudaxTresauryVestingWallet is Ownable, ReentrancyGuard, Pausable {
      * @param amount Amount of tokens being swapped.
      * @param assesType Type of asset being swapped.
      */
-    event TokenSwap(address owner, address recipent, address admin, uint256 amount, string assesType);
+    event TokenSwap(
+        address owner,
+        address recipent,
+        address admin,
+        uint256 amount,
+        string assesType
+    );
 
     /**
      * @dev Emitted when an Eco wallet is added.
@@ -110,12 +133,16 @@ contract CloudaxTresauryVestingWallet is Ownable, ReentrancyGuard, Pausable {
     /**
      * @dev Emitted when tokens are burnt.
      * @param owner Owner initiating the burn.
-     * @param recipent Recipient of the burnt tokens.
      * @param admin Admin address involved in the burn.
      * @param burnAddress Address where tokens are burned.
      * @param amount Amount of tokens being burned.
      */
-    event TokenBurnt(address owner, address recipent, address admin, address burnAddress, uint256 amount);
+    event TokenBurnt(
+        address owner,
+        address admin,
+        address burnAddress,
+        uint256 amount
+    );
 
     /**
      * @dev Emitted when vesting is initialized.
@@ -124,28 +151,40 @@ contract CloudaxTresauryVestingWallet is Ownable, ReentrancyGuard, Pausable {
      * @param projectToken Address of the project token.
      * @param vestingAllocation Allocation for vesting.
      */
-    event VestingInitialized(uint256 durationInMonths, address beneficiary, address projectToken, uint256 vestingAllocation);
+    event VestingInitialized(
+        uint256 durationInMonths,
+        address beneficiary,
+        address projectToken,
+        uint256 vestingAllocation
+    );
 
     // Constants
-    uint256 private constant _RELEASE_TIME_UNIT = 30 days;  // Originally 30 days, changed to 1 minute for test purposes
+    uint256 private constant _RELEASE_TIME_UNIT = 30 days; // Originally 30 days, changed to 1 minute for test purposes
 
     // State variables
-    ERC20 private immutable _token;   // The ERC20 token managed by this contract
-    uint256 public ecoWallets;        // Counter for Eco wallets
-    uint256 private cliffPeroidinMonths;  // Cliff period for vesting in months
+    ERC20 private immutable _token; // The ERC20 token managed by this contract
+    uint256 public ecoWallets; // Counter for Eco wallets
+    uint256 private cliffPeroidinMonths; // Cliff period for vesting in months
     uint256 private _vestingDuration; // vesting duration in months
+    uint256 private _totalBurnt;
 
-    uint256 private _startTime;        // Start time of the contract
-    address private _beneficiaryAddress;   // Address of the beneficiary
-    mapping(uint256 => VestingSchedule) private _vestingSchedule;   // Mapping of vesting schedules
-    uint256 private _vestingScheduleCount;   // Counter for vesting schedules
-    uint256 private _lastReleasedTime;      // Last time tokens were released
-    uint256 private _releasedAmount;        // Total amount of released tokens
-    mapping(uint256 => uint256) private _previousTotalVestingAmount;   // Mapping of previous total vesting amounts
-    mapping(address => uint256) public _swappedForEco;    // Mapping of swapped tokens for Eco
-    mapping(address => uint256) public _swappedForCldx;   // Mapping of swapped tokens for CLDX
-    mapping(address => uint256) public ecoApprovalWallet;  // Mapping of Eco approval wallets
+    uint256 private _startTime; // Start time of the contract
+    address private _beneficiaryAddress; // Address of the beneficiary
+    address private oracle; // Address of the oracle
+    mapping(uint256 => VestingSchedule) private _vestingSchedule; // Mapping of vesting schedules
+    uint256 private _vestingScheduleCount; // Counter for vesting schedules
+    uint256 private _lastReleasedTime; // Last time tokens were released
+    uint256 private _releasedAmount; // Total amount of released tokens
+    mapping(uint256 => uint256) private _previousTotalVestingAmount; // Mapping of previous total vesting amounts
+    mapping(address => uint256) public _swappedForEco; // Mapping of swapped tokens for Eco
+    mapping(address => uint256) public _swappedForCldx; // Mapping of swapped tokens for CLDX
+    mapping(address => uint256) public ecoApprovalWallet; // Mapping of Eco approval wallets
 
+    // Modifier to restrict function execution to the oracle address
+    modifier onlyOracle() {
+        if (msg.sender != oracle) revert UnauthorizedAddress();
+        _;
+    }
     /**
      * @dev Constructor to initialize the contract.
      * @param token_ Address of the ERC20 token.
@@ -154,23 +193,25 @@ contract CloudaxTresauryVestingWallet is Ownable, ReentrancyGuard, Pausable {
     constructor(address token_, address initialOwner) Ownable(initialOwner) {
         require(token_ != address(0), "invalid token address");
         _token = ERC20(token_);
-        _pause();  // Pause the contract initially
+        oracle = msg.sender;
+        _totalBurnt = 0;
+        _pause(); // Pause the contract initially
     }
 
     /**
-    * @notice Retrieves the ERC20 token address managed by the vesting contract.
-    * @dev This function is read-only and does not modify the state.
-    * @return The address of the ERC20 token contract.
-    */
+     * @notice Retrieves the ERC20 token address managed by the vesting contract.
+     * @dev This function is read-only and does not modify the state.
+     * @return The address of the ERC20 token contract.
+     */
     function getToken() external view returns (address) {
         return address(_token);
     }
 
     /**
-    * @notice Sets the beneficiary address for the vesting schedule.
-    * @dev Only the owner can call this function.
-    * @param beneficiary_ The address to set as the beneficiary.
-    */
+     * @notice Sets the beneficiary address for the vesting schedule.
+     * @dev Only the owner can call this function.
+     * @param beneficiary_ The address to set as the beneficiary.
+     */
     function setBeneficiaryAddress(address beneficiary_) external onlyOwner {
         _setBeneficiaryAddress(beneficiary_);
     }
@@ -189,6 +230,17 @@ contract CloudaxTresauryVestingWallet is Ownable, ReentrancyGuard, Pausable {
     }
 
     /**
+     * @notice Sets the oracle address.
+     * @dev Only the owner can call this function.
+     * @param _oracle The address to set as the oracle address.
+     */
+    function setOracleAddress(address _oracle) external onlyOwner {
+        if (_oracle == address(0)) revert InvalidOracleAddress();
+        emit OracleSet(oracle, _oracle);
+        oracle = _oracle;
+    }
+
+    /**
      * @dev Get the current beneficiary address.
      * @return Current beneficiary address.
      */
@@ -197,13 +249,13 @@ contract CloudaxTresauryVestingWallet is Ownable, ReentrancyGuard, Pausable {
     }
 
     /**
-    * @notice Initializes the vesting schedule with a given duration and allocation.
-    * @dev This function can only be called by the owner of the contract.
-    * @param months Duration of the vesting schedule in months.
-    * @param beneficiary_ Address of the beneficiary receiving the tokens.
-    * @param vestingAllocation Total amount allocated for vesting.
-    * @param cliffPeriod Months of the cliff period before tokens can be released.
-    */
+     * @notice Initializes the vesting schedule with a given duration and allocation.
+     * @dev This function can only be called by the owner of the contract.
+     * @param months Duration of the vesting schedule in months.
+     * @param beneficiary_ Address of the beneficiary receiving the tokens.
+     * @param vestingAllocation Total amount allocated for vesting.
+     * @param cliffPeriod Months of the cliff period before tokens can be released.
+     */
     function initialize(
         uint256 months,
         address beneficiary_,
@@ -647,26 +699,26 @@ contract CloudaxTresauryVestingWallet is Ownable, ReentrancyGuard, Pausable {
     }
 
     /**
-    * @notice Pauses the vesting release process.
-    * @dev Can only be called by the owner of the contract.
-    */
+     * @notice Pauses the vesting release process.
+     * @dev Can only be called by the owner of the contract.
+     */
     function pause() external onlyOwner {
         _pause();
     }
 
     /**
-    * @notice Unpauses the vesting release process.
-    * @dev Can only be called by the owner of the contract.
-    */
+     * @notice Unpauses the vesting release process.
+     * @dev Can only be called by the owner of the contract.
+     */
     function unpause() external onlyOwner {
         _unpause();
     }
 
     /**
-    * @notice Creates a new vesting schedule for a beneficiary internally.
-    * @dev Called by the `initialize` function to set up vesting schedules.
-    * @param amount Total amount of tokens to be released at the end of the vesting.
-    */
+     * @notice Creates a new vesting schedule for a beneficiary internally.
+     * @dev Called by the `initialize` function to set up vesting schedules.
+     * @param amount Total amount of tokens to be released at the end of the vesting.
+     */
     function _createVestingSchedule(uint256 amount) internal {
         uint256 scheduleId = _vestingScheduleCount;
         _vestingSchedule[scheduleId].startTime =
@@ -677,19 +729,19 @@ contract CloudaxTresauryVestingWallet is Ownable, ReentrancyGuard, Pausable {
         _vestingSchedule[scheduleId].totalAmount = amount;
         uint256 nextScheduleId = scheduleId + 1;
         _vestingScheduleCount = nextScheduleId;
-        _previousTotalVestingAmount[
-            nextScheduleId
-        ] = _previousTotalVestingAmount[scheduleId] + amount;
+        _previousTotalVestingAmount[nextScheduleId] =
+            _previousTotalVestingAmount[scheduleId] +
+            amount;
     }
 
     /**
-    * @notice Calculates the releasable amount of tokens for a vesting schedule.
-    * @dev Used internally to determine how many tokens can be released at a given time.
-    * @param currentTime Current timestamp to check against the vesting schedule.
-    * @return releasable Amount of tokens that can be released.
-    * @return released Amount of tokens already released.
-    * @return total Total amount of tokens allocated for the beneficiary.
-    */
+     * @notice Calculates the releasable amount of tokens for a vesting schedule.
+     * @dev Used internally to determine how many tokens can be released at a given time.
+     * @param currentTime Current timestamp to check against the vesting schedule.
+     * @return releasable Amount of tokens that can be released.
+     * @return released Amount of tokens already released.
+     * @return total Total amount of tokens allocated for the beneficiary.
+     */
     function _computeReleasableAmount(
         uint256 currentTime
     )
@@ -720,11 +772,9 @@ contract CloudaxTresauryVestingWallet is Ownable, ReentrancyGuard, Pausable {
                 scheduleCount
             ];
 
-            releasableAmountTotal = (previousVestingTotal + (
-                (_vestingSchedule[scheduleCount].totalAmount * remainTime) / 
-                    _RELEASE_TIME_UNIT
-                )
-            );
+            releasableAmountTotal = (previousVestingTotal +
+                ((_vestingSchedule[scheduleCount].totalAmount * remainTime) /
+                    _RELEASE_TIME_UNIT));
         }
 
         uint256 releasableAmount = releasableAmountTotal - _releasedAmount;
@@ -732,22 +782,22 @@ contract CloudaxTresauryVestingWallet is Ownable, ReentrancyGuard, Pausable {
     }
 
     /**
-    * @notice Retrieves the current releasable amount of tokens.
-    * @dev Read-only function that calculates the releasable amount based on the current time.
-    * @return _releasable The current releasable amount of tokens.
-    */
+     * @notice Retrieves the current releasable amount of tokens.
+     * @dev Read-only function that calculates the releasable amount based on the current time.
+     * @return _releasable The current releasable amount of tokens.
+     */
     function getReleasableAmount() external view returns (uint256 _releasable) {
         uint256 currentTime = getCurrentTime();
         (_releasable, , ) = _computeReleasableAmount(currentTime);
     }
 
     /**
-    * @notice Retrieves the token release information for the beneficiary.
-    * @dev Read-only function that provides details on the releasable, released, and total tokens.
-    * @return releasable The current releasable amount of tokens.
-    * @return released The amount of tokens already released to the beneficiary.
-    * @return total The total amount of tokens allocated for the beneficiary.
-    */
+     * @notice Retrieves the token release information for the beneficiary.
+     * @dev Read-only function that provides details on the releasable, released, and total tokens.
+     * @return releasable The current releasable amount of tokens.
+     * @return released The amount of tokens already released to the beneficiary.
+     * @return total The total amount of tokens allocated for the beneficiary.
+     */
     function getReleaseInfo()
         public
         view
@@ -774,78 +824,72 @@ contract CloudaxTresauryVestingWallet is Ownable, ReentrancyGuard, Pausable {
     }
 
     /**
-    * @notice Releases the releasable amount of tokens to the beneficiary.
-    * @dev This function can only be called by the owner and when the contract is not paused.
-    * @return true if the release was successful.
-    */
+     * @notice Releases the releasable amount of tokens to the beneficiary.
+     * @dev This function can only be called by the owner and when the contract is not paused.
+     * @return true if the release was successful.
+     */
     function release() external whenNotPaused nonReentrant returns (bool) {
         require(_release(getCurrentTime()), "CloudrVesting: release failed");
         return true;
     }
 
     /**
-    * @notice Swaps CLDX tokens for ECO tokens for approved wallets.
-    * @dev This function is designed to allow authorized wallets to exchange CLDX for ECO tokens.
-    * @param amount The amount of CLDX tokens to swap.
-    * @param recipent The address receiving the ECO tokens.
-    */
+     * @notice Swaps CLDX tokens for ECO tokens for approved wallets.
+     * @dev This function is designed to allow authorized wallets to exchange CLDX for ECO tokens.
+     * @param amount The amount of CLDX tokens to swap.
+     * @param recipent The address receiving the ECO tokens.
+     */
     function swapCldxToEco(
         uint256 amount,
         address recipent
-    ) external nonReentrant {
-        require(
-            ecoApprovalWallet[msg.sender] != 0,
-            "This wallet is not an approved EcoWallet"
-        );
-        require(amount != 0, "Amount must be greater than Zero");
-        // burn CLDX by sending it to a zero address
-        require(
-            _token.balanceOf(address(this)) >= amount,
-            "Not enough cldx in treasury"
-        );
+    ) external nonReentrant onlyOracle {
+        if (ecoApprovalWallet[msg.sender] == 0) revert NotAnApprovedEcoWallet();
+        if (amount == 0) revert InsufficientAmount();
+        if (_token.balanceOf(address(this)) < amount)
+            revert InsufficientTokens();
 
-        _swappedForEco[recipent] += amount;
+        uint256 burnAmount = (amount * 20) / 100; // 20% of the amount to burn
+        uint256 lockAmount = amount - burnAmount; // The rest to lock
+
+        // Ensure total burnt does not exceed 20% of total supply
+        if (_totalBurnt + burnAmount > (_token.totalSupply() * 20) / 100)
+            revert ExceededBurnAllocation();
+
+        _totalBurnt += burnAmount; // Update total burnt
+        _swappedForEco[recipent] += lockAmount; // Lock the rest
         emit TokenSwap(
-            address(0x000000000000000000000000000000000000dEaD),
             recipent,
+            address(this),
             msg.sender,
-            amount,
+            lockAmount,
             "CldxToEco"
         );
         emit TokenBurnt(
-            address(this),
             recipent,
             msg.sender,
             address(0x000000000000000000000000000000000000dEaD),
-            amount
+            burnAmount
         );
         _token.transfer(
             address(0x000000000000000000000000000000000000dEaD),
-            amount
+            burnAmount
         );
     }
 
     /**
-    * @notice Swaps ECO tokens for CLDX tokens for approved wallets.
-    * @dev This function is designed to allow authorized wallets to exchange ECO for CLDX tokens.
-    * @param amount The amount of ECO tokens to swap.
-    * @param recipent The address receiving the CLDX tokens.
-    */
+     * @notice Swaps ECO tokens for CLDX tokens for approved wallets.
+     * @dev This function is designed to allow authorized wallets to exchange ECO for CLDX tokens.
+     * @param amount The amount of ECO tokens to swap.
+     * @param recipent The address receiving the CLDX tokens.
+     */
     function swapEcoToCldx(
         uint256 amount,
         address recipent
-    ) external nonReentrant {
-        require(
-            ecoApprovalWallet[msg.sender] != 0,
-            "This wallet is not an approved EcoWallet"
-        );
-        require(recipent != address(0), "Must not be a zero address");
-        require(amount != 0, "Amount must be greater than Zero");
-        // burn CLDX by sending it to a zero address
-        require(
-            _token.balanceOf(address(this)) >= amount,
-            "Not enough cldx in treasury"
-        );
+    ) external nonReentrant onlyOracle {
+        if(ecoApprovalWallet[msg.sender] == 0) revert NotAnApprovedEcoWallet();
+        if(recipent == address(0)) revert ZeroAddress();
+        if (amount == 0) revert InsufficientAmount();
+        if(_token.balanceOf(address(this)) < amount) revert InsufficientTokens();
         _swappedForCldx[recipent] += amount;
         emit TokenSwap(
             address(this),
@@ -858,10 +902,10 @@ contract CloudaxTresauryVestingWallet is Ownable, ReentrancyGuard, Pausable {
     }
 
     /**
-    * @notice Approves an ECO wallet to perform token swaps.
-    * @dev This function can only be called by the owner of the contract.
-    * @param wallet The address of the wallet to be approved.
-    */
+     * @notice Approves an ECO wallet to perform token swaps.
+     * @dev This function can only be called by the owner of the contract.
+     * @param wallet The address of the wallet to be approved.
+     */
     function aproveEcoWallet(address wallet) external onlyOwner {
         require(
             ecoApprovalWallet[wallet] == 0,
@@ -873,10 +917,10 @@ contract CloudaxTresauryVestingWallet is Ownable, ReentrancyGuard, Pausable {
     }
 
     /**
-    * @notice Removes approval for an ECO wallet to perform token swaps.
-    * @dev This function can only be called by the owner of the contract.
-    * @param wallet The address of the wallet to be removed.
-    */
+     * @notice Removes approval for an ECO wallet to perform token swaps.
+     * @dev This function can only be called by the owner of the contract.
+     * @param wallet The address of the wallet to be removed.
+     */
     function removeEcoWallet(address wallet) external onlyOwner {
         require(
             ecoApprovalWallet[wallet] != 0,
@@ -887,10 +931,10 @@ contract CloudaxTresauryVestingWallet is Ownable, ReentrancyGuard, Pausable {
     }
 
     /**
-    * @notice Withdraws the specified amount of tokens if possible.
-    * @dev Only the owner can call this function, and the contract must be paused.
-    * @param amount The amount of tokens to withdraw.
-    */
+     * @notice Withdraws the specified amount of tokens if possible.
+     * @dev Only the owner can call this function, and the contract must be paused.
+     * @param amount The amount of tokens to withdraw.
+     */
     function withdraw(
         uint256 amount
     ) external nonReentrant onlyOwner whenPaused {
@@ -902,29 +946,29 @@ contract CloudaxTresauryVestingWallet is Ownable, ReentrancyGuard, Pausable {
     }
 
     /**
-    * @notice Returns the amount of tokens that can be withdrawn by the owner.
-    * @dev This function is read-only and does not modify the state.
-    * @return The amount of tokens available for withdrawal.
-    */
+     * @notice Returns the amount of tokens that can be withdrawn by the owner.
+     * @dev This function is read-only and does not modify the state.
+     * @return The amount of tokens available for withdrawal.
+     */
     function getWithdrawableAmount() public view returns (uint256) {
         return _token.balanceOf(address(this));
     }
 
     /**
-    * @notice Returns the number of vesting schedules managed by this contract.
-    * @dev This function is read-only and does not modify the state.
-    * @return The number of vesting schedules.
-    */
+     * @notice Returns the number of vesting schedules managed by this contract.
+     * @dev This function is read-only and does not modify the state.
+     * @return The number of vesting schedules.
+     */
     function getVestingSchedulesCount() external view returns (uint256) {
         return _vestingScheduleCount;
     }
 
     /**
-    * @notice Returns the vesting schedule information for a given identifier.
-    * @dev This function is read-only and does not modify the state.
-    * @param scheduleId Vesting schedule index: 0, 1, 2, ...
-    * @return The vesting schedule structure information.
-    */
+     * @notice Returns the vesting schedule information for a given identifier.
+     * @dev This function is read-only and does not modify the state.
+     * @param scheduleId Vesting schedule index: 0, 1, 2, ...
+     * @return The vesting schedule structure information.
+     */
     function getVestingSchedule(
         uint256 scheduleId
     ) external view returns (VestingSchedule memory) {
@@ -932,20 +976,20 @@ contract CloudaxTresauryVestingWallet is Ownable, ReentrancyGuard, Pausable {
     }
 
     /**
-    * @notice Returns the release start timestamp.
-    * @dev This function is read-only and does not modify the state.
-    * @return The block timestamp of the release start.
-    */
+     * @notice Returns the release start timestamp.
+     * @dev This function is read-only and does not modify the state.
+     * @return The block timestamp of the release start.
+     */
     function getStartTime() external view returns (uint256) {
         return _startTime;
     }
 
     /**
-    * @notice Returns the daily releasable amount of tokens for the mining pool.
-    * @dev This function is read-only and does not modify the state.
-    * @param currentTime Current timestamp to calculate the daily releasable amount.
-    * @return The amount of token that can be released daily.
-    */
+     * @notice Returns the daily releasable amount of tokens for the mining pool.
+     * @dev This function is read-only and does not modify the state.
+     * @param currentTime Current timestamp to calculate the daily releasable amount.
+     * @return The amount of token that can be released daily.
+     */
     function getDailyReleasableAmount(
         uint256 currentTime
     ) external view whenNotPaused returns (uint256) {
@@ -965,47 +1009,48 @@ contract CloudaxTresauryVestingWallet is Ownable, ReentrancyGuard, Pausable {
     }
 
     /**
-    * @notice Returns the current timestamp.
-    * @dev This function is read-only and does not modify the state.
-    * @return The block timestamp of the current time.
-    */
+     * @notice Returns the current timestamp.
+     * @dev This function is read-only and does not modify the state.
+     * @return The block timestamp of the current time.
+     */
     function getCurrentTime() public view virtual returns (uint256) {
         return block.timestamp;
     }
 
     /**
-    * @notice Returns the cliff period in months.
-    * @dev This function is read-only and does not modify the state.
-    * @return The cliff period in months.
-    */
+     * @notice Returns the cliff period in months.
+     * @dev This function is read-only and does not modify the state.
+     * @return The cliff period in months.
+     */
     function getCliff() public view virtual returns (uint256) {
         return cliffPeroidinMonths;
     }
 
     /**
-    * @notice Burns a specified amount of tokens by sending them to a zero address.
-    * @dev Only the owner can call this function.
-    * @param amount The amount of tokens to burn.
-    */
+     * @notice Burns a specified amount of tokens by sending them to a zero address.
+     * @dev Only the owner can call this function.
+     * @param amount The amount of tokens to burn.
+     */
     function burn(uint256 amount) public onlyOwner {
         // burn CLDX by sending it to a zero address
-        require(amount != 0, "Amount must be greater than Zero");
-        require(
-            _token.balanceOf(address(this)) >= amount,
-            "Not enough tokens in treasury"
-        );
+        if(amount == 0) revert InsufficientAmount();
+        if(_token.balanceOf(address(this)) < amount) revert InsufficientTokens();
+
+        // Ensure total burnt does not exceed 20% of total supply
+        if(_totalBurnt + amount > (_token.totalSupply() * 20) / 100) revert ExceededBurnAllocation();
+
+        _totalBurnt += amount; // Update total burnt
+
         _token.transfer(
             address(0x000000000000000000000000000000000000dEaD),
             amount
         );
 
         emit TokenBurnt(
-            address(this),
             msg.sender,
             msg.sender,
             address(0x000000000000000000000000000000000000dEaD),
             amount
         );
-    }        
-
+    }
 }

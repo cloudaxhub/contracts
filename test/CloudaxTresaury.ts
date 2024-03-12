@@ -89,9 +89,12 @@ describe("Cloudax Tresuary", function () {
       await cloudax.connect(owner).sendTokens(cloudaxTresauryVestingWallet.getAddress(), 1000)
 
       // Swap CLDX to ECO
-      await cloudaxTresauryVestingWallet.connect(owner).swapCldxToEco(100, john.address);
+      const amountToTransfer = 100;
+      await cloudaxTresauryVestingWallet.connect(owner).swapCldxToEco(amountToTransfer, john.address);
+      const burntToken = amountToTransfer * 0.2
+      const remainingAmountToTransfer = amountToTransfer - burntToken;
       const swappedForEco = await cloudaxTresauryVestingWallet._swappedForEco(john.address)
-      expect(swappedForEco).to.equal(100);
+      expect(swappedForEco).to.equal(remainingAmountToTransfer);
 
       // Swap ECO to CLDX
       await cloudaxTresauryVestingWallet.swapEcoToCldx(100, jane.address);
