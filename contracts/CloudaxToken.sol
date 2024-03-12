@@ -65,9 +65,6 @@ contract Cloudax is ERC20, Ownable {
         _mint(msg.sender, _totalSupply);
     }
 
-    // Fallback function to accept Ether
-    receive() external payable {}
-
     /**
      * @dev Updates the state by checking if the sender and receiver are blacklisted and if trading is enabled.
      * @param from The address sending tokens.
@@ -126,25 +123,6 @@ contract Cloudax is ERC20, Ownable {
     */
     function setTradingEnabled(bool _status) external onlyOwner {
         isTradingEnabled = _status;
-    }
-
-
-    /**
-    * @notice Withdraws Ether from the contract to the specified recipient.
-    * @dev Can only be called by the owner.
-    * @param recipient The address to receive the Ether.
-    * @param amount The amount of Ether to withdraw.
-    */
-    function withdrawEther(address recipient, uint256 amount) external onlyOwner {
-        require(recipient != address(0), "Can't be a zero address");
-
-        uint256 balance = address(this).balance;
-
-        require(balance >= amount, "CLDX: Insufficient balance");
-        (bool success, ) = payable(recipient).call{ value: amount }("");
-        if (!success) {
-            revert("CLDX: Transfer failed");
-        }
     }
 
     /**
