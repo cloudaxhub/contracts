@@ -57,7 +57,7 @@ import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.s
  *
  */
 
-contract CloudaxTresauryVestingWallet is Ownable, ReentrancyGuard, Pausable {
+contract CloudaxTresauryVestingWallet is Ownable, ReentrancyGuard, Initializable, Pausable {
     using SafeERC20 for ERC20;
 
     // Custom errors
@@ -265,7 +265,7 @@ contract CloudaxTresauryVestingWallet is Ownable, ReentrancyGuard, Pausable {
         address beneficiary_,
         uint256 vestingAllocation,
         uint8 cliffPeriod
-    ) external onlyOwner {
+    ) external initializer onlyOwner {
         // set vesting duration
         _vestingDuration = months;
         //set cliff period in months
