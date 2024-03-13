@@ -190,7 +190,7 @@ contract CloudaxTresauryVestingWallet is
     mapping(uint256 => uint256) private _previousTotalVestingAmount; // Mapping of previous total vesting amounts
     mapping(address => uint256) public _swappedForEco; // Mapping of swapped tokens for Eco
     mapping(address => uint256) public _swappedForCldx; // Mapping of swapped tokens for CLDX
-    mapping(address => uint256) public ecoApprovalWallet; // Mapping of Eco approval wallets
+    mapping(address => bool) public ecoApprovalWallet; // Mapping of Eco approval wallets
 
     // Modifier to restrict function execution to the oracle address
     modifier onlyOracle() {
@@ -845,7 +845,7 @@ contract CloudaxTresauryVestingWallet is
         uint256 amount,
         address recipent
     ) external nonReentrant onlyOracle {
-        if (ecoApprovalWallet[msg.sender] == 0) revert NotAnApprovedEcoWallet();
+        if (ecoApprovalWallet[msg.sender] == false) revert NotAnApprovedEcoWallet();
         if (amount == 0) revert InsufficientAmount();
         if (_token.balanceOf(address(this)) < amount)
             revert InsufficientTokens();
@@ -888,7 +888,7 @@ contract CloudaxTresauryVestingWallet is
         uint256 amount,
         address recipent
     ) external nonReentrant onlyOracle {
-        if (ecoApprovalWallet[msg.sender] == 0) revert NotAnApprovedEcoWallet();
+        if (ecoApprovalWallet[msg.sender] == false) revert NotAnApprovedEcoWallet();
         if (recipent == address(0)) revert ZeroAddress();
         if (amount == 0) revert InsufficientAmount();
         if (_token.balanceOf(address(this)) < amount)
@@ -910,9 +910,9 @@ contract CloudaxTresauryVestingWallet is
      * @param wallet The address of the wallet to be approved.
      */
     function aproveEcoWallet(address wallet) external onlyOwner {
-        if (ecoApprovalWallet[wallet] != 0) revert AlreadyApproved();
+        if (ecoApprovalWallet[wallet] == true) revert AlreadyApproved();
         ecoWallets += 1;
-        ecoApprovalWallet[wallet] = 1;
+        ecoApprovalWallet[wallet] = true;
         emit EcoWalletAdded(wallet, msg.sender);
     }
 
@@ -922,8 +922,8 @@ contract CloudaxTresauryVestingWallet is
      * @param wallet The address of the wallet to be removed.
      */
     function removeEcoWallet(address wallet) external onlyOwner {
-        if (ecoApprovalWallet[msg.sender] == 0) revert NotAnApprovedEcoWallet();
-        ecoApprovalWallet[wallet] = 0;
+        if (ecoApprovalWallet[msg.sender] == false) revert NotAnApprovedEcoWallet();
+        ecoApprovalWallet[wallet] = false;
         ecoWallets - 1;
         emit EcoWalletRemoved(wallet, msg.sender);
     }
