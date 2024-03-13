@@ -809,7 +809,7 @@ contract CloudaxTresuary is
      * @return _releasable The current releasable amount of tokens.
      */
     function getReleasableAmount() external view returns (uint256 _releasable) {
-        uint256 currentTime = getCurrentTime();
+        uint256 currentTime = block.timestamp;
         (_releasable, , ) = _computeReleasableAmount(currentTime);
     }
 
@@ -825,7 +825,7 @@ contract CloudaxTresuary is
         view
         returns (uint256 releasable, uint256 released, uint256 total)
     {
-        uint256 currentTime = getCurrentTime();
+        uint256 currentTime = block.timestamp;
         (releasable, released, total) = _computeReleasableAmount(currentTime);
     }
 
@@ -849,7 +849,7 @@ contract CloudaxTresuary is
      * @return true if the release was successful.
      */
     function release() external whenNotPaused nonReentrant returns (bool) {
-        if (!_release(getCurrentTime())) revert ReleaseFailed();
+        if (!_release(block.timestamp)) revert ReleaseFailed();
         return true;
     }
 
@@ -1017,15 +1017,6 @@ contract CloudaxTresuary is
         uint256 scheduleCount = duration / _RELEASE_TIME_UNIT;
         if (scheduleCount >= _vestingScheduleCount) return 0;
         return _vestingSchedule[scheduleCount].totalAmount / 30;
-    }
-
-    /**
-     * @notice Returns the current timestamp.
-     * @dev This function is read-only and does not modify the state.
-     * @return The block timestamp of the current time.
-     */
-    function getCurrentTime() public view virtual returns (uint256) {
-        return block.timestamp;
     }
 
     /**
