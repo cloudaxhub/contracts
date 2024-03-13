@@ -767,7 +767,7 @@ contract CloudaxTresauryVestingWallet is
         uint256 remainTime = (duration - (_RELEASE_TIME_UNIT * scheduleCount));
         uint256 releasableAmountTotal;
 
-        if (scheduleCount > _vestingScheduleCount) {
+        if (scheduleCount >= _vestingScheduleCount) {
             releasableAmountTotal = _previousTotalVestingAmount[
                 _vestingScheduleCount
             ];
@@ -994,7 +994,7 @@ contract CloudaxTresauryVestingWallet is
 
         uint256 duration = currentTime - _startTime;
         uint256 scheduleCount = duration / _RELEASE_TIME_UNIT;
-        if (scheduleCount > _vestingScheduleCount) return 0;
+        if (scheduleCount >= _vestingScheduleCount) return 0;
         return _vestingSchedule[scheduleCount].totalAmount / 30;
     }
 
