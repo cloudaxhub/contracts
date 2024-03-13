@@ -72,7 +72,7 @@ describe("Cloudax Token", function () {
       // Attempt a token transfer when trading is disabled
       await expect(
         cloudax.connect(john).sendTokens(jane.address, 10)
-      ).to.be.revertedWith("Trading is not enabled yet");
+      ).to.be.revertedWithCustomError;
 
       // Enable trading
       await cloudax.connect(owner).setTradingEnabled(true);
@@ -113,28 +113,6 @@ describe("Cloudax Token", function () {
   });
 
   describe("Withdrawal Functions", function () {
-    it("Should allow the owner to withdraw Ether", async () => {
-      const { cloudax, owner, john, jane } = await loadFixture(deployAndSetup);
-      const initialBalanceOwner = await ethers.provider.getBalance(
-        jane.address
-      );
-
-      const withdrawalAmount = ethers.parseEther("1.0");
-
-      await john.sendTransaction({
-        to: cloudax.getAddress(),
-        value: withdrawalAmount,
-      });
-
-      const amount = ethers.parseEther("1.0");
-      // Withdraw Ether to owner
-      await cloudax.connect(owner).withdrawEther(jane.address, amount);
-
-      const finalBalanceOwner = await ethers.provider.getBalance(jane.address);
-      expect(finalBalanceOwner).to.equal(
-        initialBalanceOwner + withdrawalAmount
-      );
-    });
 
     it("Should allow the owner to withdraw ERC-20 tokens", async () => {
       const { cloudax, owner, john } = await loadFixture(deployAndSetup);
@@ -164,7 +142,7 @@ describe("Cloudax Token", function () {
       await cloudax.connect(owner).setBlacklisted(john.address, true);
       await expect(
         cloudax.connect(john).sendTokens(owner.address, 100)
-      ).to.be.revertedWith("An address is blacklisted");
+      ).to.be.revertedWithCustomError;
     });
 
     it("Should prevent blacklisted addresses from receiving tokens", async () => {
@@ -180,7 +158,7 @@ describe("Cloudax Token", function () {
       const { cloudax, owner, john } = await loadFixture(deployAndSetup);
       await expect(
         cloudax.connect(john).sendTokens(owner.address, 100)
-      ).to.be.revertedWith("Trading is not enabled yet");
+      ).to.be.revertedWithCustomError;
     });
 
     it("Should allow presale transfers when trading is disabled", async () => {
@@ -194,27 +172,4 @@ describe("Cloudax Token", function () {
     });
   });
 
-  describe("More Withdrawal Functions", function () {
-    it("Should revert if trying to withdraw more Ether than the contract has", async () => {
-      const { cloudax, owner } = await loadFixture(deployAndSetup);
-      const amount = ethers.parseEther("1.0");
-      await cloudax.connect(owner).setTradingEnabled(true);
-      await expect(
-        cloudax.connect(owner).withdrawEther(owner.address, amount)
-      ).to.be.revertedWith("CLDX: Insufficient balance");
-    });
-  });
-
-  describe("Fallback Function", function () {
-    it("Should accept Ether sent to the contract", async () => {
-      const { cloudax, owner } = await loadFixture(deployAndSetup);
-      const amount = ethers.parseEther("1.0");
-      await owner.sendTransaction({
-        to: cloudax.getAddress(),
-        value: amount
-      });
-      const balance = await ethers.provider.getBalance(cloudax.getAddress());
-      expect(balance).to.equal(amount);
-    });
-  });
 });

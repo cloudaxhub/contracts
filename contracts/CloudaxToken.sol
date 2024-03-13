@@ -55,6 +55,10 @@ contract Cloudax is ERC20, Ownable {
     uint256 private _totalSupply =  200000000 * (10**18);
     bool public isTradingEnabled = false;
 
+    error AddressIsBlacklisted();
+    error TradingNotEnabled();
+    error ZeroAddress();
+
     event Blacklisted(address account, bool status);
 
     /**
@@ -72,9 +76,10 @@ contract Cloudax is ERC20, Ownable {
      * @param amount The amount of tokens to transfer.
      */
     function _update(address from, address to, uint256 amount) internal override {
-        require(!_isBlacklisted[from] && !_isBlacklisted[to], "An address is blacklisted");
+        if (_isBlacklisted[from] || _isBlacklisted[to])
+            revert AddressIsBlacklisted();
         if (from != owner() && from != presaleAddress) {
-            require(isTradingEnabled, "Trading is not enabled yet");
+            if (!isTradingEnabled) revert TradingNotEnabled();
         }
         super._update(from, to, amount);
     }
@@ -137,7 +142,7 @@ contract Cloudax is ERC20, Ownable {
         address recipient,
         uint256 amount
     ) external onlyOwner {
-        require(recipient != address(0), "Can't be the zero address");
+        if (recipient == address(0)) revert ZeroAddress();
         ERC20 token = ERC20(tokenAddress);
         uint256 balance = token.balanceOf(address(this));
         if (amount > balance) {

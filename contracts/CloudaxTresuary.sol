@@ -60,13 +60,20 @@ import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.s
 contract CloudaxTresauryVestingWallet is Ownable, ReentrancyGuard, Pausable {
     using SafeERC20 for ERC20;
 
-    error UnauthorizedAddress();
+    // Custom errors
+    error InvalidTokenAddress();
+    error InvalidBeneficiaryAddress();
     error InvalidOracleAddress();
-    error NotAnApprovedEcoWallet();
-    error InsufficientAmount();
+    error VestingNotInitialized();
+    error ReleaseFailed();
+    error VestingScheduleNotSet();
     error InsufficientTokens();
-    error ExceededBurnAllocation();
+    error NotAnApprovedEcoWallet();
+    error AlreadyApproved();
     error ZeroAddress();
+    error InsufficientAmount();
+    error UnauthorizedAddress();
+    error ExceededBurnAllocation();
 
     // Structure to represent a vesting schedule
     struct VestingSchedule {
@@ -191,7 +198,7 @@ contract CloudaxTresauryVestingWallet is Ownable, ReentrancyGuard, Pausable {
      * @param initialOwner Address of the initial owner of the contract.
      */
     constructor(address token_, address initialOwner) Ownable(initialOwner) {
-        require(token_ != address(0), "invalid token address");
+        if (token_ == address(0)) revert InvalidTokenAddress();
         _token = ERC20(token_);
         oracle = msg.sender;
         _totalBurnt = 0;
@@ -221,10 +228,7 @@ contract CloudaxTresauryVestingWallet is Ownable, ReentrancyGuard, Pausable {
      * @param beneficiary_ New beneficiary address.
      */
     function _setBeneficiaryAddress(address beneficiary_) internal {
-        require(
-            beneficiary_ != address(0),
-            "CloudrVesting: invalid beneficiary address"
-        );
+        if (beneficiary_ == address(0)) revert InvalidBeneficiaryAddress();
         emit BeneficiarySet(_beneficiaryAddress, beneficiary_);
         _beneficiaryAddress = beneficiary_;
     }
@@ -749,14 +753,9 @@ contract CloudaxTresauryVestingWallet is Ownable, ReentrancyGuard, Pausable {
         view
         returns (uint256 releasable, uint256 released, uint256 total)
     {
-        require(
-            currentTime >= _startTime,
-            "CloudrVesting: no vesting is available now"
-        );
-        require(
-            _vestingScheduleCount == _vestingDuration,
-            "CloudrVesting: vesting schedule is not set"
-        );
+        if (currentTime < _startTime) revert VestingNotInitialized();
+        if (_vestingScheduleCount != _vestingDuration)
+            revert VestingScheduleNotSet();
 
         uint256 duration = currentTime - _startTime;
         uint256 scheduleCount = duration / _RELEASE_TIME_UNIT;
@@ -812,10 +811,7 @@ contract CloudaxTresauryVestingWallet is Ownable, ReentrancyGuard, Pausable {
      * @return The success or failure.
      */
     function _release(uint256 currentTime) internal returns (bool) {
-        require(
-            currentTime >= _startTime,
-            "CloudrVesting: vesting schedule is not initialized"
-        );
+        if (currentTime < _startTime) revert VestingNotInitialized();
         (uint256 releaseAmount, , ) = _computeReleasableAmount(currentTime);
         _token.transfer(_beneficiaryAddress, releaseAmount);
         _releasedAmount = _releasedAmount + releaseAmount;
@@ -829,7 +825,7 @@ contract CloudaxTresauryVestingWallet is Ownable, ReentrancyGuard, Pausable {
      * @return true if the release was successful.
      */
     function release() external whenNotPaused nonReentrant returns (bool) {
-        require(_release(getCurrentTime()), "CloudrVesting: release failed");
+        if (!_release(getCurrentTime())) revert ReleaseFailed();
         return true;
     }
 
@@ -886,10 +882,11 @@ contract CloudaxTresauryVestingWallet is Ownable, ReentrancyGuard, Pausable {
         uint256 amount,
         address recipent
     ) external nonReentrant onlyOracle {
-        if(ecoApprovalWallet[msg.sender] == 0) revert NotAnApprovedEcoWallet();
-        if(recipent == address(0)) revert ZeroAddress();
+        if (ecoApprovalWallet[msg.sender] == 0) revert NotAnApprovedEcoWallet();
+        if (recipent == address(0)) revert ZeroAddress();
         if (amount == 0) revert InsufficientAmount();
-        if(_token.balanceOf(address(this)) < amount) revert InsufficientTokens();
+        if (_token.balanceOf(address(this)) < amount)
+            revert InsufficientTokens();
         _swappedForCldx[recipent] += amount;
         emit TokenSwap(
             address(this),
@@ -907,10 +904,7 @@ contract CloudaxTresauryVestingWallet is Ownable, ReentrancyGuard, Pausable {
      * @param wallet The address of the wallet to be approved.
      */
     function aproveEcoWallet(address wallet) external onlyOwner {
-        require(
-            ecoApprovalWallet[wallet] == 0,
-            "This wallet is already an approved EcoWallet"
-        );
+        if(ecoApprovalWallet[wallet] != 0) revert AlreadyApproved();
         ecoWallets += 1;
         ecoApprovalWallet[wallet] = 1;
         emit EcoWalletAdded(wallet, msg.sender);
@@ -922,10 +916,7 @@ contract CloudaxTresauryVestingWallet is Ownable, ReentrancyGuard, Pausable {
      * @param wallet The address of the wallet to be removed.
      */
     function removeEcoWallet(address wallet) external onlyOwner {
-        require(
-            ecoApprovalWallet[wallet] != 0,
-            "This wallet is not an approved EcoWallet"
-        );
+        if (ecoApprovalWallet[msg.sender] == 0) revert NotAnApprovedEcoWallet();
         ecoApprovalWallet[wallet] = 0;
         emit EcoWalletRemoved(wallet, msg.sender);
     }
@@ -938,10 +929,7 @@ contract CloudaxTresauryVestingWallet is Ownable, ReentrancyGuard, Pausable {
     function withdraw(
         uint256 amount
     ) external nonReentrant onlyOwner whenPaused {
-        require(
-            getWithdrawableAmount() >= amount,
-            "CloudrVesting: withdraw amount exceeds balance"
-        );
+         if(getWithdrawableAmount() < amount) revert InsufficientAmount();
         _token.transfer(owner(), amount);
     }
 
@@ -993,14 +981,9 @@ contract CloudaxTresauryVestingWallet is Ownable, ReentrancyGuard, Pausable {
     function getDailyReleasableAmount(
         uint256 currentTime
     ) external view whenNotPaused returns (uint256) {
-        require(
-            currentTime >= _startTime,
-            "CloudrVesting: no vesting is available now"
-        );
-        require(
-            _vestingScheduleCount == _vestingDuration,
-            "CloudrVesting: vesting schedule is not set"
-        );
+        if (currentTime < _startTime) revert VestingNotInitialized();
+        if (_vestingScheduleCount != _vestingDuration)
+            revert VestingNotInitialized();
 
         uint256 duration = currentTime - _startTime;
         uint256 scheduleCount = duration / _RELEASE_TIME_UNIT;
@@ -1033,11 +1016,13 @@ contract CloudaxTresauryVestingWallet is Ownable, ReentrancyGuard, Pausable {
      */
     function burn(uint256 amount) public onlyOwner {
         // burn CLDX by sending it to a zero address
-        if(amount == 0) revert InsufficientAmount();
-        if(_token.balanceOf(address(this)) < amount) revert InsufficientTokens();
+        if (amount == 0) revert InsufficientAmount();
+        if (_token.balanceOf(address(this)) < amount)
+            revert InsufficientTokens();
 
         // Ensure total burnt does not exceed 20% of total supply
-        if(_totalBurnt + amount > (_token.totalSupply() * 20) / 100) revert ExceededBurnAllocation();
+        if (_totalBurnt + amount > (_token.totalSupply() * 20) / 100)
+            revert ExceededBurnAllocation();
 
         _totalBurnt += amount; // Update total burnt
 

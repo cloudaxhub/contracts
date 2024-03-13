@@ -112,6 +112,7 @@ describe("Cloudax Tresuary", function () {
       // Remove the ECO wallet
       await cloudaxTresauryVestingWallet.connect(owner).removeEcoWallet(john.address);
       const isApproved = await cloudaxTresauryVestingWallet.connect(owner).ecoApprovalWallet(john.address);
+      console.log("isApproved",isApproved)
       expect(isApproved).to.equal(0);
     });
   });
