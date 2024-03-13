@@ -79,6 +79,8 @@ contract CloudaxTresauryVestingWallet is
     error InsufficientAmount();
     error UnauthorizedAddress();
     error ExceededBurnAllocation();
+    error InvalidMonthsValue();
+    error VestingAllocationZero();
 
     // Structure to represent a vesting schedule
     struct VestingSchedule {
@@ -271,6 +273,23 @@ contract CloudaxTresauryVestingWallet is
         uint256 vestingAllocation,
         uint8 cliffPeriod
     ) external initializer onlyOwner {
+        // Validate months parameter
+        if (
+            months != 12 &&
+            months != 24 &&
+            months != 36 &&
+            months != 48 &&
+            months != 60 &&
+            months != 72 &&
+            months != 84
+        ) {
+            revert InvalidMonthsValue();
+        }
+
+        // Validate vestingAllocation parameter
+        if (vestingAllocation == 0) {
+            revert VestingAllocationZero();
+        }
         // set vesting duration
         _vestingDuration = months;
         //set cliff period in months
@@ -845,7 +864,8 @@ contract CloudaxTresauryVestingWallet is
         uint256 amount,
         address recipent
     ) external nonReentrant onlyOracle {
-        if (ecoApprovalWallet[msg.sender] == false) revert NotAnApprovedEcoWallet();
+        if (ecoApprovalWallet[msg.sender] == false)
+            revert NotAnApprovedEcoWallet();
         if (amount == 0) revert InsufficientAmount();
         if (_token.balanceOf(address(this)) < amount)
             revert InsufficientTokens();
@@ -888,7 +908,8 @@ contract CloudaxTresauryVestingWallet is
         uint256 amount,
         address recipent
     ) external nonReentrant onlyOracle {
-        if (ecoApprovalWallet[msg.sender] == false) revert NotAnApprovedEcoWallet();
+        if (ecoApprovalWallet[msg.sender] == false)
+            revert NotAnApprovedEcoWallet();
         if (recipent == address(0)) revert ZeroAddress();
         if (amount == 0) revert InsufficientAmount();
         if (_token.balanceOf(address(this)) < amount)
@@ -922,7 +943,8 @@ contract CloudaxTresauryVestingWallet is
      * @param wallet The address of the wallet to be removed.
      */
     function removeEcoWallet(address wallet) external onlyOwner {
-        if (ecoApprovalWallet[msg.sender] == false) revert NotAnApprovedEcoWallet();
+        if (ecoApprovalWallet[msg.sender] == false)
+            revert NotAnApprovedEcoWallet();
         ecoApprovalWallet[wallet] = false;
         ecoWallets - 1;
         emit EcoWalletRemoved(wallet, msg.sender);
@@ -1040,7 +1062,7 @@ contract CloudaxTresauryVestingWallet is
             amount
         );
 
-         _token.safeTransfer(
+        _token.safeTransfer(
             address(0x000000000000000000000000000000000000dEaD),
             amount
         );
