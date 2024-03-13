@@ -9,7 +9,7 @@ import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
 /**
- * @title CloudaxTresauryVestingWallet (smart contract)
+ * @title CloudaxTresuary (smart contract)
  * @dev A contract designed to manage the vesting of tokens according to predefined schedules.
  * It is intended to facilitate token distribution processes, particularly those involving
  * gradual release over time, which is common in token sales and employee compensation schemes.
@@ -57,7 +57,7 @@ import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.s
  *
  */
 
-contract CloudaxTresauryVestingWallet is
+contract CloudaxTresuary is
     Ownable,
     ReentrancyGuard,
     Initializable,
