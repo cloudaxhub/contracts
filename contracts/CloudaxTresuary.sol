@@ -924,6 +924,7 @@ contract CloudaxTresauryVestingWallet is
     function removeEcoWallet(address wallet) external onlyOwner {
         if (ecoApprovalWallet[msg.sender] == 0) revert NotAnApprovedEcoWallet();
         ecoApprovalWallet[wallet] = 0;
+        ecoWallets - 1;
         emit EcoWalletRemoved(wallet, msg.sender);
     }
 
