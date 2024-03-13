@@ -53,7 +53,7 @@ contract Cloudax is ERC20, Ownable {
     address public presaleAddress;
 
     uint256 private _totalSupply =  200000000 * (10**18);
-    bool public isTradingEnabled = false;
+    bool public isTradingEnabled;
 
     error AddressIsBlacklisted();
     error TradingNotEnabled();
