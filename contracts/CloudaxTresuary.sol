@@ -57,7 +57,12 @@ import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.s
  *
  */
 
-contract CloudaxTresauryVestingWallet is Ownable, ReentrancyGuard, Initializable, Pausable {
+contract CloudaxTresauryVestingWallet is
+    Ownable,
+    ReentrancyGuard,
+    Initializable,
+    Pausable
+{
     using SafeERC20 for ERC20;
 
     // Custom errors
@@ -813,9 +818,10 @@ contract CloudaxTresauryVestingWallet is Ownable, ReentrancyGuard, Initializable
     function _release(uint256 currentTime) internal returns (bool) {
         if (currentTime < _startTime) revert VestingNotInitialized();
         (uint256 releaseAmount, , ) = _computeReleasableAmount(currentTime);
-        _token.transfer(_beneficiaryAddress, releaseAmount);
+
         _releasedAmount = _releasedAmount + releaseAmount;
         emit Released(_beneficiaryAddress, releaseAmount);
+        _token.transfer(_beneficiaryAddress, releaseAmount);
         return true;
     }
 
@@ -904,7 +910,7 @@ contract CloudaxTresauryVestingWallet is Ownable, ReentrancyGuard, Initializable
      * @param wallet The address of the wallet to be approved.
      */
     function aproveEcoWallet(address wallet) external onlyOwner {
-        if(ecoApprovalWallet[wallet] != 0) revert AlreadyApproved();
+        if (ecoApprovalWallet[wallet] != 0) revert AlreadyApproved();
         ecoWallets += 1;
         ecoApprovalWallet[wallet] = 1;
         emit EcoWalletAdded(wallet, msg.sender);
@@ -929,7 +935,7 @@ contract CloudaxTresauryVestingWallet is Ownable, ReentrancyGuard, Initializable
     function withdraw(
         uint256 amount
     ) external nonReentrant onlyOwner whenPaused {
-         if(getWithdrawableAmount() < amount) revert InsufficientAmount();
+        if (getWithdrawableAmount() < amount) revert InsufficientAmount();
         _token.transfer(owner(), amount);
     }
 
@@ -1026,14 +1032,14 @@ contract CloudaxTresauryVestingWallet is Ownable, ReentrancyGuard, Initializable
 
         _totalBurnt += amount; // Update total burnt
 
-        _token.transfer(
+        emit TokenBurnt(
+            msg.sender,
+            msg.sender,
             address(0x000000000000000000000000000000000000dEaD),
             amount
         );
 
-        emit TokenBurnt(
-            msg.sender,
-            msg.sender,
+         _token.transfer(
             address(0x000000000000000000000000000000000000dEaD),
             amount
         );
