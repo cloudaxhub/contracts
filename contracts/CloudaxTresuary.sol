@@ -187,7 +187,6 @@ contract CloudaxTresauryVestingWallet is
     address private oracle; // Address of the oracle
     mapping(uint256 => VestingSchedule) private _vestingSchedule; // Mapping of vesting schedules
     uint256 private _vestingScheduleCount; // Counter for vesting schedules
-    uint256 private _lastReleasedTime; // Last time tokens were released
     uint256 private _releasedAmount; // Total amount of released tokens
     mapping(uint256 => uint256) private _previousTotalVestingAmount; // Mapping of previous total vesting amounts
     mapping(address => uint256) public _swappedForEco; // Mapping of swapped tokens for Eco
