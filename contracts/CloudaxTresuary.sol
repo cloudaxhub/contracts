@@ -69,7 +69,7 @@ contract CloudaxTresauryVestingWallet is
     error InvalidTokenAddress();
     error InvalidBeneficiaryAddress();
     error InvalidOracleAddress();
-    error VestingNotInitialized();
+    error VestingreleaseHasNotReached();
     error ReleaseFailed();
     error VestingScheduleNotSet();
     error InsufficientTokens();
@@ -758,7 +758,7 @@ contract CloudaxTresauryVestingWallet is
         view
         returns (uint256 releasable, uint256 released, uint256 total)
     {
-        if (currentTime < _startTime) revert VestingNotInitialized();
+        if (currentTime < _startTime) revert VestingreleaseHasNotReached();
         if (_vestingScheduleCount != _vestingDuration)
             revert VestingScheduleNotSet();
 
@@ -816,7 +816,7 @@ contract CloudaxTresauryVestingWallet is
      * @return The success or failure.
      */
     function _release(uint256 currentTime) internal returns (bool) {
-        if (currentTime < _startTime) revert VestingNotInitialized();
+        if (currentTime < _startTime) revert VestingreleaseHasNotReached();
         (uint256 releaseAmount, , ) = _computeReleasableAmount(currentTime);
 
         _releasedAmount = _releasedAmount + releaseAmount;
@@ -988,9 +988,9 @@ contract CloudaxTresauryVestingWallet is
     function getDailyReleasableAmount(
         uint256 currentTime
     ) external view whenNotPaused returns (uint256) {
-        if (currentTime < _startTime) revert VestingNotInitialized();
+        if (currentTime < _startTime) revert VestingreleaseHasNotReached();
         if (_vestingScheduleCount != _vestingDuration)
-            revert VestingNotInitialized();
+            revert VestingreleaseHasNotReached();
 
         uint256 duration = currentTime - _startTime;
         uint256 scheduleCount = duration / _RELEASE_TIME_UNIT;
