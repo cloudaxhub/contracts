@@ -821,7 +821,7 @@ contract CloudaxTresauryVestingWallet is
 
         _releasedAmount = _releasedAmount + releaseAmount;
         emit Released(_beneficiaryAddress, releaseAmount);
-        _token.transfer(_beneficiaryAddress, releaseAmount);
+        _token.safeTransfer(_beneficiaryAddress, releaseAmount);
         return true;
     }
 
@@ -872,7 +872,7 @@ contract CloudaxTresauryVestingWallet is
             address(0x000000000000000000000000000000000000dEaD),
             burnAmount
         );
-        _token.transfer(
+        _token.safeTransfer(
             address(0x000000000000000000000000000000000000dEaD),
             burnAmount
         );
@@ -901,7 +901,7 @@ contract CloudaxTresauryVestingWallet is
             amount,
             "EcoToCldx"
         );
-        _token.transfer(recipent, amount);
+        _token.safeTransfer(recipent, amount);
     }
 
     /**
@@ -936,7 +936,7 @@ contract CloudaxTresauryVestingWallet is
         uint256 amount
     ) external nonReentrant onlyOwner whenPaused {
         if (getWithdrawableAmount() < amount) revert InsufficientAmount();
-        _token.transfer(owner(), amount);
+        _token.safeTransfer(owner(), amount);
     }
 
     /**
@@ -1039,7 +1039,7 @@ contract CloudaxTresauryVestingWallet is
             amount
         );
 
-         _token.transfer(
+         _token.safeTransfer(
             address(0x000000000000000000000000000000000000dEaD),
             amount
         );
