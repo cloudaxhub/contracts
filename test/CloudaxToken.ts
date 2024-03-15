@@ -15,7 +15,7 @@ describe("Cloudax Token", function () {
     [owner, john, jane] = await ethers.getSigners();
 
     const Cloudax = await ethers.getContractFactory("Cloudax");
-    cloudax = await Cloudax.deploy(owner.address);
+    cloudax = await Cloudax.deploy();
 
     return { cloudax, owner, john, jane };
   }

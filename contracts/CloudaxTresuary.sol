@@ -3,7 +3,7 @@ pragma solidity 0.8.20;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import { Ownable2Step } from "./Ownable2Step.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
@@ -58,7 +58,7 @@ import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.s
  */
 
 contract CloudaxTresuary is
-    Ownable,
+    Ownable2Step,
     ReentrancyGuard,
     Initializable,
     Pausable
@@ -201,9 +201,8 @@ contract CloudaxTresuary is
     /**
      * @dev Constructor to initialize the contract.
      * @param token_ Address of the ERC20 token.
-     * @param initialOwner Address of the initial owner of the contract.
      */
-    constructor(address token_, address initialOwner) Ownable(initialOwner) {
+    constructor(address token_) {
         if (token_ == address(0)) revert InvalidTokenAddress();
         _token = ERC20(token_);
         oracle = msg.sender;
@@ -942,7 +941,7 @@ contract CloudaxTresuary is
      * @param wallet The address of the wallet to be removed.
      */
     function removeEcoWallet(address wallet) external onlyOwner {
-        if (ecoApprovalWallet[msg.sender] == false)
+        if (ecoApprovalWallet[wallet] == false)
             revert NotAnApprovedEcoWallet();
         ecoApprovalWallet[wallet] = false;
         ecoWallets - 1;

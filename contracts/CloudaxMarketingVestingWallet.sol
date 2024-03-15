@@ -4,7 +4,7 @@ pragma solidity 0.8.20;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import { Ownable2Step } from "./Ownable2Step.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 
@@ -83,7 +83,7 @@ import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
  * - `_previousTotalVestingAmount`: A mapping to keep track of the cumulative total vesting amount up to each schedule.
  */
 
-contract CloudaxMarketingVestingWallet is Ownable, ReentrancyGuard, Pausable {
+contract CloudaxMarketingVestingWallet is Ownable2Step, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
 
     /**
@@ -119,9 +119,8 @@ contract CloudaxMarketingVestingWallet is Ownable, ReentrancyGuard, Pausable {
     /**
      * @dev Constructor that sets the token and pauses the contract upon deployment.
      * @param token_ The address of the ERC20 token contract.
-     * @param initialOwner The address of the initial owner who will have control over the contract.
      */
-    constructor(address token_, address initialOwner, uint256 cliffPeroid) Ownable(initialOwner) {
+    constructor(address token_, uint256 cliffPeroid) {
         require(token_ != address(0), "invalid token address");
         _token = IERC20(token_);
         // 0 for test and 6 for main deployment

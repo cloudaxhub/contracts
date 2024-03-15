@@ -3,7 +3,7 @@ pragma solidity  0.8.20;
 
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { Ownable2Step } from "./Ownable2Step.sol";
 
 /**
  * @title Cloudax Token
@@ -46,7 +46,7 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
  *   - `_totalSupply`: The total supply of tokens minted upon deployment.
  *   - `isTradingEnabled`: A boolean indicating if trading is enabled.
  */
-contract Cloudax is ERC20, Ownable {
+contract Cloudax is ERC20, Ownable2Step {
     using SafeERC20 for ERC20;
 
     mapping(address => bool) public _isBlacklisted;
@@ -63,9 +63,8 @@ contract Cloudax is ERC20, Ownable {
 
     /**
      * @dev Constructor that mints the total supply of tokens to the contract creator.
-     * @param initialOwner The address of the initial owner of the contract.
      */
-    constructor(address initialOwner) Ownable(initialOwner) ERC20("Cloudax", "CLDX") {
+    constructor() ERC20("Cloudax", "CLDX") {
         _mint(msg.sender, _totalSupply);
     }
 

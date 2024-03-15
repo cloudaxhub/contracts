@@ -18,11 +18,11 @@ describe("Cloudax Team", function () {
 
   // Deploy cloudax
     const Cloudax = await ethers.getContractFactory("Cloudax");
-    cloudax = await Cloudax.deploy(owner.address);
+    cloudax = await Cloudax.deploy();
 
   // Deploy CloudaxAdvisoryVestingWallet
     const CloudaxAdvisoryVestingWallet = await ethers.getContractFactory("CloudaxAdvisoryVestingWallet");
-    cloudaxAdvisoryVestingWallet = await CloudaxAdvisoryVestingWallet.deploy(cloudax.getAddress() ,owner.address, 0);
+    cloudaxAdvisoryVestingWallet = await CloudaxAdvisoryVestingWallet.deploy(cloudax.getAddress(), 0);
 
     return { cloudax, cloudaxAdvisoryVestingWallet, owner, john, jane };
   }
