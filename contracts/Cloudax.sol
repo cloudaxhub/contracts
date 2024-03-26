@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
-pragma solidity  0.8.20;
+pragma solidity 0.8.20;
 
-import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import { Ownable2Step } from "./Ownable2Step.sol";
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {Ownable2Step} from "./Ownable2Step.sol";
+import "./CloudaxTresuary.sol"; // Adjust the import path as necessary
 
 /**
  * @title Cloudax Token
@@ -32,15 +33,15 @@ import { Ownable2Step } from "./Ownable2Step.sol";
  * Components:
  * - Contract: The main contract that extends ERC20 and Ownable to implement the token and ownership functionalities.
  * - Key Functions:
- *   - `_update`: Checks whether the sender and receiver are blacklisted and ensures trading is enabled.
- *   - `sendTokens`: Transfers tokens from the caller to another address.
- *   - `receiveTokens`: Transfers tokens from another address to the caller.
+ *   - `setupTresuaryAddress`: Sets the address of the CloudaxTresuary contract.
+ *   - `transfer`: Overrides the ERC20 transfer function to include blacklist checks and trading enablement checks.
+ *   - `transferFrom`: Overrides the ERC20 transferFrom function to include blacklist checks and trading enablement checks.
  *   - `setBlacklisted`: Allows the owner to add or remove addresses from the blacklist.
  *   - `setupPresaleAddress`: Sets the address allowed to participate in presales.
  *   - `setTradingEnabled`: Toggles the ability to trade tokens.
- *   - `withdrawEther`: Withdraws Ether from the contract to the specified recipient.
  *   - `withdrawTokens`: Withdraws tokens from the contract to the specified recipient.
  * - State Variables:
+ *   - `tresuary`: The address of the CloudaxTresuary contract.
  *   - `_isBlacklisted`: A mapping to check if an address is blacklisted.
  *   - `presaleAddress`: The address allowed to participate in presales.
  *   - `_totalSupply`: The total supply of tokens minted upon deployment.
@@ -48,6 +49,9 @@ import { Ownable2Step } from "./Ownable2Step.sol";
  */
 contract Cloudax is ERC20, Ownable2Step {
     using SafeERC20 for ERC20;
+    CloudaxTresuary public tresuary;
+    event TreasuryUpdated(address oldAddress, address newAddress);
+    event SwapCompleted(uint256 amount, address sender, address recipient);
 
     mapping(address => bool) public _isBlacklisted;
     address public presaleAddress;
@@ -69,36 +73,60 @@ contract Cloudax is ERC20, Ownable2Step {
     }
 
     /**
-     * @dev Updates the state by checking if the sender and receiver are blacklisted and if trading is enabled.
-     * @param from The address sending tokens.
-     * @param to The address receiving tokens.
-     * @param amount The amount of tokens to transfer.
+     * @dev Sets the address of the CloudaxTresuary contract.
+     * @param _tresuary The address of the CloudaxTresuary contract.
      */
-    function _update(address from, address to, uint256 amount) internal override {
+    function setupTresuaryAddress(address _tresuary) external onlyOwner {
+        CloudaxTresuary oldTresuary = tresuary;
+        tresuary = CloudaxTresuary(_tresuary);
+        emit TreasuryUpdated(address(oldTresuary), address(tresuary));
+    }
+
+    /**
+     * @dev Overrides the ERC20 transfer function to include blacklist checks and trading enablement checks.
+     * @param recipient The address to receive the tokens.
+     * @param amount The amount of tokens to transfer.
+     * @return true if the transfer was successful.
+     */
+    function transfer(address recipient, uint256 amount) public override returns (bool) {
+        if (_isBlacklisted[msg.sender] || _isBlacklisted[recipient])
+            revert AddressIsBlacklisted();
+        if (msg.sender != owner() && msg.sender != presaleAddress) {
+            if (!isTradingEnabled) revert TradingNotEnabled();
+        }
+        // Check if there's a pending swap operation for the sender and amount
+        (CloudaxTresuary.SwapStatus status, uint256 operationAmount) = tresuary.getSwapOperation(msg.sender);
+        if (status == CloudaxTresuary.SwapStatus.Pending && operationAmount == amount) {
+            // Proceed with the normal transfer
+            super.transfer(recipient, amount);
+            // Trigger the swap operation
+            tresuary.swapCldxToEco(amount, msg.sender);
+            emit SwapCompleted(amount, msg.sender, recipient);
+            // Optionally, remove or update the swap operation in the tresuary contract
+        } else {
+            // Proceed with the normal transfer
+            super.transfer(recipient, amount);
+        }
+        return true;
+    }
+
+    /**
+     * @dev Overrides the ERC20 transferFrom function to include blacklist checks and trading enablement checks.
+     * @param from The address to transfer tokens from.
+     * @param to The address to transfer tokens to.
+     * @param value The amount of tokens to transfer.
+     * @return true if the transfer was successful.
+     */
+    function transferFrom(address from, address to, uint256 value) public override returns (bool) {
         if (_isBlacklisted[from] || _isBlacklisted[to])
             revert AddressIsBlacklisted();
         if (from != owner() && from != presaleAddress) {
             if (!isTradingEnabled) revert TradingNotEnabled();
         }
-        super._update(from, to, amount);
-    }
-
-    /**
-     * @notice Transfers tokens from the caller to another address.
-     * @param to The address to send tokens to.
-     * @param amount The amount of tokens to send.
-     */
-    function sendTokens(address to, uint256 amount) external {
-        _update(msg.sender, to, amount);
-    }
-
-    /**
-     * @notice Transfers tokens from another address to the caller.
-     * @param from The address to receive tokens from.
-     * @param amount The amount of tokens to receive.
-     */
-    function receiveTokens(address from, uint256 amount) external {
-        ERC20.transferFrom(from, msg.sender, amount);
+        address spender = _msgSender();
+        _spendAllowance(from, spender, value);
+        super.transferFrom(from, to, value);
+        return true;
     }
 
     /**
