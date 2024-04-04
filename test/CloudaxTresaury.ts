@@ -43,47 +43,47 @@ describe("Cloudax Tresuary", function () {
   });
 
   describe("swapCldxToEco", function () {
-    // it("should swap CLDX to ECO", async function () {
-    //   const { cloudaxTresuary, owner, john, jane } = await loadFixture(
-    //     deployAndSetup
-    //   );
-    //   const amount = ethers.parseEther("100");
-    //   await cloudaxTresuary.connect(owner).setOracleAddress(john.address);
-    //   await cloudaxTresuary.connect(owner).aproveEcoWallet(john.address);
-    //   // send cldx to tresuary
-    //   await cloudax.connect(owner).setTradingEnabled(true);
-    //   // make jane the oracle
-    //   await cloudaxTresuary.connect(owner).setOracleAddress(jane.address);
-    //   // transfer cldx to user
-    //   await cloudax.connect(owner).transfer(john.address, amount);
+    it("should swap CLDX to ECO", async function () {
+      const { cloudaxTresuary, owner, john, jane } = await loadFixture(
+        deployAndSetup
+      );
+      const amount = ethers.parseEther("100");
+      await cloudaxTresuary.connect(owner).setOracleAddress(john.address);
+      await cloudaxTresuary.connect(owner).aproveEcoWallet(john.address);
+      // send cldx to tresuary
+      await cloudax.connect(owner).setTradingEnabled(true);
+      // make jane the oracle
+      await cloudaxTresuary.connect(owner).setOracleAddress(jane.address);
+      // transfer cldx to user
+      await cloudax.connect(owner).transfer(john.address, amount);
 
-    //   // initialize swap
-    //   await cloudaxTresuary.connect(jane).initiateSwap(amount, john.address);
-    //   const amountOfEcoSwapBefore = await cloudaxTresuary._swappedForEco(
-    //     jane.address
-    //   );
+      // initialize swap
+      await cloudaxTresuary.connect(jane).initiateSwap(amount, john.address);
+      const amountOfEcoSwapBefore = await cloudaxTresuary._swappedForEco(
+        jane.address
+      );
 
-    //   await cloudax
-    //     .connect(john)
-    //     .transfer(cloudaxTresuary.getAddress(), amount);
+      await cloudax
+        .connect(john)
+        .transfer(cloudaxTresuary.getAddress(), amount);
 
-    //   // const burnAmount = (amount * 20) / 100; // 20% of the amount to burn
-    //   // const lockAmount = amount - burnAmount; // The rest to lock
+      // const burnAmount = (amount * 20) / 100; // 20% of the amount to burn
+      // const lockAmount = amount - burnAmount; // The rest to lock
 
-    //   // await cloudaxTresuary
-    //   //   .connect(john)
-    //   //   .swapCldxToEco(ethers.parseEther(String(amount)), jane.address);
-    //   // Additional checks for the swap can be added here
+      // await cloudaxTresuary
+      //   .connect(john)
+      //   .swapCldxToEco(ethers.parseEther(String(amount)), jane.address);
+      // Additional checks for the swap can be added here
 
-    //   const amountOfEcoSwapAfter = await cloudaxTresuary._swappedForEco(
-    //     jane.address
-    //   );
-    //   const amountOfEcoSwapDifference =
-    //     amountOfEcoSwapAfter - amountOfEcoSwapBefore;
-    //   expect(amountOfEcoSwapAfter).to.be.equal(
-    //     amount
-    //   );
-    // });
+      const amountOfEcoSwapAfter = await cloudaxTresuary._swappedForEco(
+        jane.address
+      );
+      const amountOfEcoSwapDifference =
+        amountOfEcoSwapAfter - amountOfEcoSwapBefore;
+      expect(amountOfEcoSwapAfter).to.be.equal(
+        amount
+      );
+    });
 
     // it("should revert if the sender is not an approved Eco wallet", async function () {
     //   const { cloudaxTresuary, owner, john, jane } = await loadFixture(

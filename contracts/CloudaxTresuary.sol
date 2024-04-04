@@ -127,9 +127,6 @@ contract CloudaxTresuary is Ownable2Step, ReentrancyGuard {
         uint256 amount
     );
 
-    // Define the SwapInitiated event
-    event SwapInitiated(address indexed sender, uint256 amount);
-
     // State variables
     ERC20 private immutable _token; // The ERC20 token managed by this contract
     uint256 public ecoWallets; // Counter for Eco wallets
@@ -140,11 +137,6 @@ contract CloudaxTresuary is Ownable2Step, ReentrancyGuard {
     address public oracle; // Address of the oracle
     enum SwapStatus { Pending, Completed }
 
-    struct SwapOperation {
-        SwapStatus status;
-        uint256 amount;
-    }
-    mapping(address => SwapOperation) private swapOperations;
     mapping(address => uint256) public _swappedForEco; // Mapping of swapped tokens for Eco
     mapping(address => uint256) public _swappedForCldx; // Mapping of swapped tokens for CLDX
     mapping(address => bool) public ecoApprovalWallet; // Mapping of Eco approval wallets
@@ -199,22 +191,6 @@ contract CloudaxTresuary is Ownable2Step, ReentrancyGuard {
         burnPercentage = _burnPercentage;
     }
 
-    function initiateSwap(uint256 amount, address recipent) external onlyOracle {
-        // 000000000000000000
-        // Check if the sender has enough tokens to initiate the swap
-        if (_token.balanceOf(recipent) < amount)
-            revert InsufficientTokens();
-
-        // Initiate the swap operation by adding an entry to the swapOperations mapping
-        swapOperations[recipent] = SwapOperation({
-            status: SwapStatus.Pending,
-            amount: amount
-        });
-
-        // emit an event to log the initiation of the swap operation
-        emit SwapInitiated(recipent, amount);
-    }
-
     /**
      * @notice Swaps CLDX tokens for ECO tokens for approved wallets.
      * @dev This function is designed to allow authorized wallets to exchange CLDX for ECO tokens. 
@@ -236,7 +212,6 @@ contract CloudaxTresuary is Ownable2Step, ReentrancyGuard {
             uint256 lockAmount = amount - burnAmount; // The rest to lock
 
             // Ensure burnPercentage not equal 0
-        
             _totalBurnt += burnAmount; // Update total burnt
             _swappedForEco[recipent] += lockAmount; // Lock the rest
             emit TokenSwap(
@@ -258,11 +233,6 @@ contract CloudaxTresuary is Ownable2Step, ReentrancyGuard {
                 burnAmount
             );
         }else{
-            
-            swapOperations[recipent] = SwapOperation({
-                status: SwapStatus.Completed,
-                amount: amount
-            });
 
             _swappedForEco[recipent] += amount;
             emit TokenSwap(
@@ -324,12 +294,6 @@ contract CloudaxTresuary is Ownable2Step, ReentrancyGuard {
         ecoApprovalWallet[wallet] = false;
         ecoWallets - 1;
         emit EcoWalletRemoved(wallet, msg.sender);
-    }
-
-    // Function to get the swap operation status and amount for a given address
-    function getSwapOperation(address sender) external view returns (SwapStatus, uint256) {
-        SwapOperation memory operation = swapOperations[sender];
-        return (operation.status, operation.amount);
     }
 
     /**
