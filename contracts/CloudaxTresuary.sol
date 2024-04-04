@@ -146,12 +146,6 @@ contract CloudaxTresuary is Ownable2Step, ReentrancyGuard {
         if (msg.sender != oracle) revert UnauthorizedAddress();
         _;
     }
-
-    // Modifier to restrict function execution to the token address
-    modifier onlyToken() {
-        if (msg.sender != address(_token)) revert UnauthorizedAddress();
-        _;
-    }
     /**
      * @dev Constructor to initialize the contract.
      * @param token_ Address of the ERC20 token.
@@ -201,7 +195,7 @@ contract CloudaxTresuary is Ownable2Step, ReentrancyGuard {
     function swapCldxToEco(
         uint256 amount,
         address recipent
-    ) external nonReentrant onlyToken {
+    ) external nonReentrant onlyOracle {
         if (!ecoApprovalWallet[msg.sender]) revert NotAnApprovedEcoWallet();
         if (amount == 0) revert InsufficientAmount();
         if (_token.balanceOf(address(this)) < amount)
