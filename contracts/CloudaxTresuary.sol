@@ -127,6 +127,11 @@ contract CloudaxTresuary is Ownable2Step, ReentrancyGuard {
         uint256 amount
     );
 
+    // Define the SwapInitiated event
+    event SwapInitiated(address indexed sender, uint256 amount);
+    event SwapRatioUpdated(uint256 newSwapRatio);
+    event BurnPercentageUpdate(uint256 newBurnPercentage, uint32 oldBurnPercentage);
+
     // State variables
     ERC20 private immutable _token; // The ERC20 token managed by this contract
     uint256 public ecoWallets; // Counter for Eco wallets
@@ -135,8 +140,15 @@ contract CloudaxTresuary is Ownable2Step, ReentrancyGuard {
     uint8 public burnPercentage;
 
     address public oracle; // Address of the oracle
+    uint256 public swapRatio;  // Swap ratio for ECO to CLDX (e.g., 1 CLDX = X ECO)
+
     enum SwapStatus { Pending, Completed }
 
+    struct SwapOperation {
+        SwapStatus status;
+        uint256 amount;
+    }
+    mapping(address => SwapOperation) private swapOperations;
     mapping(address => uint256) public _swappedForEco; // Mapping of swapped tokens for Eco
     mapping(address => uint256) public _swappedForCldx; // Mapping of swapped tokens for CLDX
     mapping(address => bool) public ecoApprovalWallet; // Mapping of Eco approval wallets
@@ -146,15 +158,22 @@ contract CloudaxTresuary is Ownable2Step, ReentrancyGuard {
         if (msg.sender != oracle) revert UnauthorizedAddress();
         _;
     }
+
+    // Modifier to restrict function execution to the token address
+    modifier onlyToken() {
+        if (msg.sender != address(_token)) revert UnauthorizedAddress();
+        _;
+    }
     /**
      * @dev Constructor to initialize the contract.
      * @param token_ Address of the ERC20 token.
      */
-    constructor(address token_) {
+    constructor(address token_, uint256 initialSwapRatio) {
         if (token_ == address(0)) revert InvalidTokenAddress();
         _token = ERC20(token_);
         oracle = msg.sender;
         _totalBurnt = 0;
+        swapRatio = initialSwapRatio;
     }
 
     /**
@@ -177,12 +196,50 @@ contract CloudaxTresuary is Ownable2Step, ReentrancyGuard {
         oracle = _oracle;
     }
 
-    // Setter function for burn percentage
+    /**
+     * @notice Updates the swap ratio for CLDX to ECO token swaps.
+     * @dev Only the owner can call this function.
+     * @param newSwapRatio The new swap ratio to be set.
+     */
+    function updateSwapRatio(uint256 newSwapRatio) external onlyOwner {
+        swapRatio = newSwapRatio;
+        emit SwapRatioUpdated(newSwapRatio);
+    }
+
+    /**
+     * @notice Sets the percentage of tokens to be burned.
+     * @dev Only the owner can call this function.
+     * @param _burnPercentage The percentage of tokens to be burned.
+     */
     function setBurnPercentage(uint8 _burnPercentage) external onlyOwner {
-        if (_burnPercentage != 0 && _burnPercentage != 1 && _burnPercentage != 2 && _burnPercentage != 3 && _burnPercentage != 4 && _burnPercentage != 5) {
+        if (_burnPercentage < 0) {
             revert InvalidBurnPercentage();
         }
-        burnPercentage = _burnPercentage;
+        emit BurnPercentageUpdate(burnPercentage, _burnPercentage);
+        burnPercentage = _burnPercentage;  
+    }
+
+    /**
+     * @notice Initiates a token swap operation for an approved wallet.
+     * @dev This function is designed to allow authorized wallets to exchange CLDX for ECO tokens.
+     * @dev For the function to be triggered the web2 Oracle listens to blockchain for when the user (recipent) successfully sends the given "amount" of cldx to this "tresuary" contract.
+     * @param amount The amount of CLDX tokens to swap.
+     * @param recipent The address receiving the ECO tokens.
+     */
+    function initiateSwap(uint256 amount, address recipent) external onlyOracle {
+        // 000000000000000000
+        // Check if the sender has enough tokens to initiate the swap
+        if (_token.balanceOf(recipent) < amount)
+            revert InsufficientTokens();
+
+        // Initiate the swap operation by adding an entry to the swapOperations mapping
+        swapOperations[recipent] = SwapOperation({
+            status: SwapStatus.Pending,
+            amount: amount
+        });
+
+        // emit an event to log the initiation of the swap operation
+        emit SwapInitiated(recipent, amount);
     }
 
     /**
@@ -195,17 +252,21 @@ contract CloudaxTresuary is Ownable2Step, ReentrancyGuard {
     function swapCldxToEco(
         uint256 amount,
         address recipent
-    ) external nonReentrant onlyOracle {
+    ) external nonReentrant onlyToken {
+            // Calculate the amount of ECO tokens to be swapped based on the swap ratio
+        uint256 ecoAmount = amount * swapRatio;
+
         if (!ecoApprovalWallet[msg.sender]) revert NotAnApprovedEcoWallet();
-        if (amount == 0) revert InsufficientAmount();
-        if (_token.balanceOf(address(this)) < amount)
+        if (ecoAmount == 0) revert InsufficientAmount();
+        if (_token.balanceOf(address(this)) < ecoAmount)
             revert InsufficientTokens();
 
         if (burnPercentage != 0) {
-            uint256 burnAmount = (amount * burnPercentage) / 100;
-            uint256 lockAmount = amount - burnAmount; // The rest to lock
+            uint256 burnAmount = (ecoAmount * burnPercentage) / 100;
+            uint256 lockAmount = ecoAmount - burnAmount; // The rest to lock
 
             // Ensure burnPercentage not equal 0
+        
             _totalBurnt += burnAmount; // Update total burnt
             _swappedForEco[recipent] += lockAmount; // Lock the rest
             emit TokenSwap(
@@ -227,13 +288,18 @@ contract CloudaxTresuary is Ownable2Step, ReentrancyGuard {
                 burnAmount
             );
         }else{
+            
+            swapOperations[recipent] = SwapOperation({
+                status: SwapStatus.Completed,
+                amount: ecoAmount
+            });
 
-            _swappedForEco[recipent] += amount;
+            _swappedForEco[recipent] += ecoAmount;
             emit TokenSwap(
                 recipent,
                 address(this),
                 msg.sender,
-                amount,
+                ecoAmount,
                 "CldxToEco"
             );
         }
@@ -249,21 +315,24 @@ contract CloudaxTresuary is Ownable2Step, ReentrancyGuard {
         uint256 amount,
         address recipent
     ) external nonReentrant onlyOracle {
+             // Calculate the amount of CLDX tokens to be swapped based on the swap ratio
+        uint256 cldxAmount = amount / swapRatio;
         if (!ecoApprovalWallet[msg.sender])
             revert NotAnApprovedEcoWallet();
         if (recipent == address(0)) revert ZeroAddress();
-        if (amount == 0) revert InsufficientAmount();
-        if (_token.balanceOf(address(this)) < amount)
+        if (cldxAmount == 0) revert InsufficientAmount();
+        if (_token.balanceOf(address(this)) < cldxAmount)
             revert InsufficientTokens();
-        _swappedForCldx[recipent] += amount;
+        
+        _swappedForCldx[recipent] += cldxAmount;
         emit TokenSwap(
             address(this),
             recipent,
             msg.sender,
-            amount,
+            cldxAmount,
             "EcoToCldx"
         );
-        _token.safeTransfer(recipent, amount);
+        _token.safeTransfer(recipent, cldxAmount);
     }
 
     /**
@@ -288,6 +357,17 @@ contract CloudaxTresuary is Ownable2Step, ReentrancyGuard {
         ecoApprovalWallet[wallet] = false;
         ecoWallets - 1;
         emit EcoWalletRemoved(wallet, msg.sender);
+    }
+
+    /**
+     * @notice Returns the swap operation status and amount for a given address.
+     * @param sender The address to query the swap operation for.
+     * @return status The status of the swap operation (Pending or Completed).
+     * @return amount The amount of tokens involved in the swap operation.
+     */
+    function getSwapOperation(address sender) external view returns (SwapStatus status, uint256 amount) {
+        SwapOperation memory operation = swapOperations[sender];
+        return (operation.status, operation.amount);
     }
 
     /**
